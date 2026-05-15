@@ -1,12 +1,18 @@
 import sys, os
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon, QPalette, QColor
+from PySide6.QtWidgets import QApplication, QToolTip
 from src.ui.main_window import MainWindow
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Comic Binder")
+
+    # Fix tooltip style on Windows
+    p = app.palette()
+    p.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255, 242))
+    p.setColor(QPalette.ColorRole.ToolTipText, QColor("#1c1c1e"))
+    app.setPalette(p)
 
     # Set app icon (taskbar + window)
     if getattr(sys, 'frozen', False):
@@ -18,7 +24,8 @@ def main():
         app.setWindowIcon(QIcon(icon_path))
 
     app.setStyleSheet("""
-        * {
+        QMainWindow, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox,
+        QTableWidget, QHeaderView, QProgressBar, QToolTip {
             font-family: "SF Pro Display", "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
         }
 
@@ -176,6 +183,7 @@ def main():
             border-radius: 6px;
             background: #007aff;
         }
+
     """)
 
     window = MainWindow()

@@ -104,7 +104,8 @@ class ArchiveTab(QWidget):
         s2_layout.setContentsMargins(0, 0, 0, 0)
 
         self._file_list = FileListWidget(
-            columns=["文件名", "大小", "类型", "状态"]
+            columns=["文件名", "大小", "类型", "状态"],
+            grouped=False
         )
 
         s2_layout.addWidget(self._file_list)

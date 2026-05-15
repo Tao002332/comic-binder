@@ -1,25 +1,32 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QPushButton, QCheckBox, QAbstractItemView,
-    QMenu, QLabel, QFrame, QScrollArea,
+    QMenu, QLabel, QFrame, QScrollArea, QSizePolicy,
 )
 
 from src.utils.comic_grouper import extract_comic_name
 from src.ui.widgets.animated_checkbox import AnimatedCheckBox
+from src.ui.widgets.custom_tooltip import install as install_tip, _get_tip
+
+_PAGE_SIZE = 6
+_MIN_SCROLL_ROWS = 3
+
 
 class _GlassPanel(QFrame):
     """iOS-style glass card for one comic group."""
 
-    def __init__(self, comic_name: str, parent=None):
+    def __init__(self, comic_name: str, collapsible: bool = True, parent=None):
         super().__init__(parent)
         self._comic = comic_name
         self._collapsed = False
+        self._collapsible = collapsible
         self._file_indices: list[int] = []
         self._data_ref: list[dict] = []
         self._on_toggle_cb = None
+        self._current_page = 0
 
         self.setObjectName("glassCard")
         self.setStyleSheet("""
@@ -38,7 +45,7 @@ class _GlassPanel(QFrame):
         # --- Header ---
         self._header = QFrame()
         self._header.setFixedHeight(50)
-        self._header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._header.setCursor(Qt.CursorShape.PointingHandCursor if collapsible else Qt.CursorShape.ArrowCursor)
         self._header.setStyleSheet("background: transparent; border: none;")
         hl = QHBoxLayout(self._header)
         hl.setContentsMargins(16, 0, 14, 0)
@@ -51,6 +58,9 @@ class _GlassPanel(QFrame):
 
         title = QLabel(comic_name)
         title.setStyleSheet("font-size: 15px; font-weight: 590; color: #1c1c1e; background: transparent; border: none;")
+        title.setMaximumWidth(220)
+        title.setWordWrap(False)
+        install_tip(title, comic_name)
         hl.addWidget(title)
 
         hl.addStretch()
@@ -59,15 +69,18 @@ class _GlassPanel(QFrame):
         self._info.setStyleSheet("font-size: 12px; font-weight: 480; color: #8e8e93; background: transparent; border: none;")
         hl.addWidget(self._info)
 
-        self._chevron = QPushButton()
-        self._chevron.setFlat(True)
-        self._chevron.setFixedSize(28, 28)
-        self._chevron.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._chevron.clicked.connect(self._toggle)
-        self._set_chevron_collapsed()
-        hl.addWidget(self._chevron)
+        if collapsible:
+            self._chevron = QPushButton()
+            self._chevron.setFlat(True)
+            self._chevron.setFixedSize(28, 28)
+            self._chevron.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._chevron.clicked.connect(self._toggle)
+            self._set_chevron_collapsed()
+            hl.addWidget(self._chevron)
+            self._header.mousePressEvent = self._on_header_click
+        else:
+            self._chevron = None
 
-        self._header.mousePressEvent = self._on_header_click
         outer.addWidget(self._header)
 
         # --- Body ---
@@ -117,38 +130,53 @@ class _GlassPanel(QFrame):
             }
         """)
         body_lay.addWidget(self._table)
+
+        # Cell tooltip on hover
+        self._table.cellEntered.connect(self._on_cell_hover)
+        self._table.viewport().installEventFilter(self)
+
+        # Pagination bar (shown when > _PAGE_SIZE files)
+        self._page_bar = QFrame()
+        self._page_bar.setVisible(False)
+        pg_lay = QHBoxLayout(self._page_bar)
+        pg_lay.setContentsMargins(0, 4, 0, 0)
+        pg_lay.setSpacing(4)
+        pg_lay.addStretch()
+        self._page_prev = QPushButton("<")
+        self._page_prev.setFixedWidth(28)
+        self._page_prev.clicked.connect(self._go_prev)
+        pg_lay.addWidget(self._page_prev)
+        self._page_label = QLabel("1/1")
+        self._page_label.setStyleSheet("font-size: 11px; color: #8e8e93; background: transparent;")
+        pg_lay.addWidget(self._page_label)
+        self._page_next = QPushButton(">")
+        self._page_next.setFixedWidth(28)
+        self._page_next.clicked.connect(self._go_next)
+        pg_lay.addWidget(self._page_next)
+        pg_lay.addStretch()
+        body_lay.addWidget(self._page_bar)
+
         outer.addWidget(self._body)
 
     def _set_chevron_collapsed(self):
+        if not self._chevron: return
         self._chevron.setText("›")
         self._chevron.setStyleSheet("""
-            QPushButton {
-                font-size: 20px;
-                font-weight: 200;
-                color: #aeaeb2;
-                border: none;
-                background: transparent;
-                padding: 0px;
-            }
+            QPushButton { font-size: 20px; font-weight: 200; color: #aeaeb2; border: none; background: transparent; padding: 0px; }
             QPushButton:hover { color: #3c3c43; }
         """)
 
     def _set_chevron_expanded(self):
+        if not self._chevron: return
         self._chevron.setText("⌄")
         self._chevron.setStyleSheet("""
-            QPushButton {
-                font-size: 16px;
-                font-weight: 400;
-                color: #007aff;
-                border: none;
-                background: transparent;
-                padding: 0px;
-            }
+            QPushButton { font-size: 16px; font-weight: 400; color: #007aff; border: none; background: transparent; padding: 0px; }
             QPushButton:hover { color: #0055cc; }
         """)
 
     def _on_header_click(self, _event):
-        self._toggle()
+        if self._collapsible:
+            self._toggle()
 
     def _toggle(self):
         self._collapsed = not self._collapsed
@@ -158,12 +186,52 @@ class _GlassPanel(QFrame):
         else:
             self._set_chevron_expanded()
 
+    def _go_prev(self):
+        if self._current_page > 0:
+            self._current_page -= 1
+            self._render_page()
+
+    def _go_next(self):
+        total = max(1, (len(self._file_indices) + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        if self._current_page < total - 1:
+            self._current_page += 1
+            self._render_page()
+
+    def _render_page(self):
+        total = len(self._file_indices)
+        total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        start = self._current_page * _PAGE_SIZE
+        end = min(start + _PAGE_SIZE, total)
+        page_indices = self._file_indices[start:end]
+
+        self._table.setRowCount(0)
+        for row, idx in enumerate(page_indices):
+            item = self._data_ref[idx]
+            self._table.insertRow(row)
+            self._table.setRowHeight(row, 42)
+
+            cb = AnimatedCheckBox()
+            cb.setChecked(item.get("selected", True))
+            cb.toggled.connect(lambda checked, r=idx: self._on_file_toggle(r, checked))
+            self._table.setCellWidget(row, 0, _center_widget(cb))
+
+            for ci, col_name in enumerate(self._columns):
+                val = item.get(col_name, "")
+                t = QTableWidgetItem(str(val))
+                t.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                self._table.setItem(row, ci + 1, t)
+
+        self._page_label.setText(f"{self._current_page + 1}/{total_pages}")
+        self._page_prev.setEnabled(self._current_page > 0)
+        self._page_next.setEnabled(self._current_page < total_pages - 1)
+
     def set_files(self, indices: list[int], data: list[dict], columns: list[str]):
         self._file_indices = indices
         self._data_ref = data
-        self._table.setColumnCount(len(columns) + 1)
-        self._table.setRowCount(0)
+        self._columns = columns
+        self._current_page = 0
 
+        self._table.setColumnCount(len(columns) + 1)
         labels = [""] + list(columns)
         self._table.setHorizontalHeaderLabels(labels)
 
@@ -172,6 +240,24 @@ class _GlassPanel(QFrame):
         self._table.setColumnWidth(0, 42)
         for i in range(len(columns)):
             header.setSectionResizeMode(i + 1, QHeaderView.ResizeMode.Stretch)
+
+        # Pagination: show page bar when > _PAGE_SIZE, scroll when > _MIN_SCROLL_ROWS
+        total = len(indices)
+        use_pages = total > _PAGE_SIZE
+        self._page_bar.setVisible(use_pages)
+
+        if use_pages:
+            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self._table.setMaximumHeight((_PAGE_SIZE + 1) * 42 + 32)
+            self._render_page()
+        elif total > _MIN_SCROLL_ROWS:
+            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self._table.setMaximumHeight((_MIN_SCROLL_ROWS + 1) * 42 + 32)
+            self._render_all_rows(indices)
+        else:
+            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self._table.setMaximumHeight(16777215)
+            self._render_all_rows(indices)
 
         all_sel = True
         sel_count = 0
@@ -182,6 +268,17 @@ class _GlassPanel(QFrame):
             else:
                 all_sel = False
 
+        self._group_cb.blockSignals(True)
+        self._group_cb.setChecked(all_sel)
+        self._group_cb.blockSignals(False)
+        self._group_cb.toggled.connect(self._on_group_toggle)
+
+        self._info.setText(f"{len(indices)} 个文件 · {sel_count} 已选")
+
+    def _render_all_rows(self, indices: list[int]):
+        self._table.setRowCount(0)
+        for idx in indices:
+            item = self._data_ref[idx]
             row = self._table.rowCount()
             self._table.insertRow(row)
             self._table.setRowHeight(row, 42)
@@ -191,18 +288,11 @@ class _GlassPanel(QFrame):
             cb.toggled.connect(lambda checked, r=idx: self._on_file_toggle(r, checked))
             self._table.setCellWidget(row, 0, _center_widget(cb))
 
-            for ci, col_name in enumerate(columns):
+            for ci, col_name in enumerate(self._columns):
                 val = item.get(col_name, "")
                 t = QTableWidgetItem(str(val))
                 t.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self._table.setItem(row, ci + 1, t)
-
-        self._group_cb.blockSignals(True)
-        self._group_cb.setChecked(all_sel)
-        self._group_cb.blockSignals(False)
-        self._group_cb.toggled.connect(self._on_group_toggle)
-
-        self._info.setText(f"{len(indices)} 个文件 · {sel_count} 已选")
 
     def _on_file_toggle(self, idx: int, checked: bool):
         if 0 <= idx < len(self._data_ref):
@@ -213,24 +303,42 @@ class _GlassPanel(QFrame):
         self._group_cb.setChecked(all_sel)
         self._group_cb.blockSignals(False)
         self._info.setText(f"{len(self._file_indices)} 个文件 · {sel} 已选")
+        if use_pages := self._page_bar.isVisible():
+            self._page_prev.setEnabled(self._current_page > 0)
         if self._on_toggle_cb:
             self._on_toggle_cb()
 
     def _on_group_toggle(self, checked: bool):
         for idx in self._file_indices:
             self._data_ref[idx]["selected"] = checked
-        for row in range(self._table.rowCount()):
-            cb_w = self._table.cellWidget(row, 0)
-            if cb_w:
-                cb = cb_w.findChild(QCheckBox)
-                if cb:
-                    cb.blockSignals(True)
-                    cb.setChecked(checked)
-                    cb.blockSignals(False)
+        self._render_current_view()
         sel = len(self._file_indices) if checked else 0
         self._info.setText(f"{len(self._file_indices)} 个文件 · {sel} 已选")
         if self._on_toggle_cb:
             self._on_toggle_cb()
+
+    def _render_current_view(self):
+        if self._page_bar.isVisible():
+            self._render_page()
+        else:
+            self._render_all_rows(self._file_indices)
+
+    def _on_cell_hover(self, row: int, col: int):
+        if row < 0 or col < 1:
+            _get_tip().hide()
+            return
+        item = self._table.item(row, col)
+        if item:
+            pos = self._table.viewport().mapToGlobal(
+                self._table.visualItemRect(item).bottomRight()
+            )
+            _get_tip().show_text(pos, item.text())
+
+    def eventFilter(self, obj, event):
+        if obj is self._table.viewport():
+            if event.type() == QEvent.Type.Leave:
+                _get_tip().hide()
+        return super().eventFilter(obj, event)
 
     @property
     def file_indices(self):
@@ -239,10 +347,6 @@ class _GlassPanel(QFrame):
     @property
     def group_cb(self):
         return self._group_cb
-
-    @property
-    def table(self):
-        return self._table
 
     def set_toggle_callback(self, cb):
         self._on_toggle_cb = cb
@@ -263,9 +367,10 @@ class FileListWidget(QWidget):
     selection_changed = Signal()
     remove_requested = Signal(list)
 
-    def __init__(self, columns: list[str], parent=None):
+    def __init__(self, columns: list[str], grouped: bool = True, parent=None):
         super().__init__(parent)
         self._columns = columns
+        self._grouped = grouped
         self._data: list[dict] = []
         self._groups: dict[str, list[int]] = {}
         self._panels: dict[str, _GlassPanel] = {}
@@ -283,8 +388,13 @@ class FileListWidget(QWidget):
         self._search.textChanged.connect(self._on_search)
         top.addWidget(self._search)
 
-        for text, slot in [("展开全部", self._expand_all), ("折叠全部", self._collapse_all),
-                           ("全选", self._select_all), ("取消全选", self._deselect_all)]:
+        if grouped:
+            for text, slot in [("展开全部", self._expand_all), ("折叠全部", self._collapse_all)]:
+                btn = QPushButton(text)
+                btn.clicked.connect(slot)
+                top.addWidget(btn)
+
+        for text, slot in [("全选", self._select_all), ("取消全选", self._deselect_all)]:
             btn = QPushButton(text)
             btn.clicked.connect(slot)
             top.addWidget(btn)
@@ -304,6 +414,7 @@ class FileListWidget(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._container = QWidget()
         self._container.setStyleSheet("background: transparent;")
         self._container_lay = QVBoxLayout(self._container)
@@ -336,9 +447,15 @@ class FileListWidget(QWidget):
 
     def _rebuild_groups(self):
         self._groups = {}
-        for i, item in enumerate(self._data):
-            c = self._comic_name(item)
-            self._groups.setdefault(c, []).append(i)
+        if not self._grouped:
+            # Flat mode: all files in one group
+            all_indices = list(range(len(self._data)))
+            if all_indices:
+                self._groups[""] = all_indices
+        else:
+            for i, item in enumerate(self._data):
+                c = self._comic_name(item)
+                self._groups.setdefault(c, []).append(i)
 
     def _rebuild_panels(self):
         for p in self._panels.values():
@@ -355,7 +472,9 @@ class FileListWidget(QWidget):
             if not visible:
                 continue
 
-            panel = _GlassPanel(comic)
+            collapsible = self._grouped and comic != ""
+            title = comic if comic else "全部文件"
+            panel = _GlassPanel(title, collapsible=collapsible)
             panel.set_files(visible, self._data, self._columns)
             panel.set_toggle_callback(lambda: self.selection_changed.emit())
             self._container_lay.insertWidget(self._container_lay.count() - 1, panel)
