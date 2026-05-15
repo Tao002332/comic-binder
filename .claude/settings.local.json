@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(python main.py)",
+      "Bash(python -c \"from src.core.archive_scanner import scan_archives; from src.core.archive_converter import convert_archive_to_pdf; from src.core.kindle_scanner import scan_kindle_files, get_default_kindle_path; from src.core.kindle_converter import convert_kindle_file; from src.core.task_manager import TaskManager; print\\('All imports OK'\\)\")",
+      "Bash(python -m py_compile main.py)",
+      "Bash(python -m py_compile src/ui/main_window.py)",
+      "Bash(python -m py_compile src/ui/archive_tab.py)",
+      "Bash(python -m py_compile src/ui/kindle_tab.py)",
+      "Bash(python -m py_compile src/ui/widgets/file_list_widget.py)",
+      "Bash(python -m py_compile main.py src/ui/main_window.py src/ui/archive_tab.py src/ui/kindle_tab.py src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py src/core/archive_scanner.py src/core/archive_converter.py src/core/kindle_scanner.py src/core/kindle_converter.py src/core/task_manager.py src/utils/helpers.py src/utils/settings.py)",
+      "Bash(python -c \"from src.utils.settings import get_last_path, set_last_path, get_calibre_path, set_calibre_path, get_ebook_meta_path, get_ebook_convert_path; print\\('Settings OK'\\); from src.core.kindle_scanner import scan_kindle_files, refresh_metadata; print\\('Scanner OK \\(with ebook_meta_path param\\)'\\); from src.core.kindle_converter import convert_kindle_file; print\\('Converter OK \\(with ebook_convert_path param\\)'\\)\")",
+      "Bash(python -m py_compile src/core/kindle_scanner.py src/core/kindle_converter.py)",
+      "Bash(python -m py_compile main.py src/ui/main_window.py src/ui/archive_tab.py src/ui/kindle_tab.py src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py src/core/task_manager.py src/core/archive_converter.py src/core/kindle_converter.py)",
+      "Bash(python -c \"from src.ui.main_window import MainWindow; from src.ui.archive_tab import ArchiveTab; from src.ui.kindle_tab import KindleTab; from src.ui.widgets.file_list_widget import FileListWidget; from src.ui.widgets.progress_widget import ProgressWidget; print\\('All imports OK'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile src/core/kindle_converter.py src/ui/kindle_tab.py src/ui/archive_tab.py)",
+      "Bash(python -m py_compile src/core/task_manager.py src/ui/archive_tab.py src/ui/kindle_tab.py)",
+      "Bash(python -m py_compile src/utils/comic_grouper.py src/core/task_manager.py)",
+      "Bash(python -m py_compile main.py src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py)",
+      "Bash(python -m py_compile src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py)",
+      "Bash(python -m py_compile src/ui/archive_tab.py src/ui/kindle_tab.py src/ui/main_window.py main.py)",
+      "Bash(python -m py_compile src/utils/comic_grouper.py)",
+      "Bash(python -m py_compile src/utils/comic_grouper.py src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py main.py)",
+      "Bash(python -m py_compile main.py src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py src/ui/main_window.py)",
+      "Bash(python -m py_compile src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py main.py)",
+      "Bash(python -m py_compile src/ui/widgets/file_list_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py)",
+      "Bash(python -m py_compile src/ui/widgets/progress_widget.py)"
+    ]
+  }
+}
