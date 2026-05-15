@@ -277,25 +277,71 @@ class KindleTab(QWidget):
             self._pending_output_dir = output_dir
             self._pending_output_format = output_format
 
+            # Group by comic name, pre-create folders for groups with 2+ files
+            from src.utils.comic_grouper import extract_comic_name
+            groups: dict[str, list[dict]] = {}
+            for item in selected:
+                name = item.get("解析标题") or item.get("原始ID") or ""
+                comic = extract_comic_name(name)
+                groups.setdefault(comic, []).append(item)
+
+            # Detect existing output files (replicate kindle_converter filename logic)
+            from src.core.kindle_converter import _sanitize_filename
+            ext = f".{output_format.lower()}"
+            duplicates = []
+            for comic, items in groups.items():
+                task_outdir = os.path.join(output_dir, comic) if len(items) >= 2 else output_dir
+                for item in items:
+                    kf: KindleFile = item["_kindle"]
+                    if kf.parsed_title:
+                        base = _sanitize_filename(kf.parsed_title)
+                    else:
+                        base = os.path.splitext(os.path.basename(kf.azw_path))[0]
+                    out_path = os.path.join(task_outdir, f"{base}{ext}")
+                    if os.path.isfile(out_path):
+                        duplicates.append(out_path)
+                        item["状态"] = "存在同名文件"
+
+            if duplicates:
+                self._file_list.set_data(self._file_list.get_data())
+                reply = QMessageBox.question(
+                    self, "发现同名文件",
+                    f"发现 {len(duplicates)} 个同名文件已存在：\n\n" +
+                    "\n".join(f"  • {os.path.basename(d)}" for d in duplicates[:10]) +
+                    ("\n  ..." if len(duplicates) > 10 else "") +
+                    "\n\n是否覆盖继续？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+
             self._task_manager.clear_tasks()
             self._progress_widget.clear()
 
-            for item in selected:
-                kf: KindleFile = item["_kindle"]
-                task_id = kf.azw_path
-                self._task_manager.add_task(
-                    task_id=task_id,
-                    name=kf.display_name,
-                    metadata={
-                        "azw_path": kf.azw_path,
-                        "output_dir": output_dir,
-                        "output_format": output_format,
-                        "delete_source": delete_source,
-                        "folder_path": kf.folder_path,
-                        "output_name": kf.parsed_title or None,
-                    },
-                )
-                self._progress_widget.register_task(task_id, kf.display_name)
+            for comic, items in groups.items():
+                if len(items) >= 2:
+                    task_outdir = os.path.join(output_dir, comic)
+                    os.makedirs(task_outdir, exist_ok=True)
+                else:
+                    task_outdir = output_dir
+
+                for item in items:
+                    kf: KindleFile = item["_kindle"]
+                    task_id = kf.azw_path
+                    self._task_manager.add_task(
+                        task_id=task_id,
+                        name=kf.display_name,
+                        metadata={
+                            "azw_path": kf.azw_path,
+                            "output_dir": task_outdir,
+                            "output_format": output_format,
+                            "delete_source": delete_source,
+                            "folder_path": kf.folder_path,
+                            "output_name": kf.parsed_title or None,
+                        },
+                    )
+                    self._progress_widget.register_task(task_id, kf.display_name)
 
             self._start_btn.setEnabled(False)
             self._cancel_btn.setVisible(True)

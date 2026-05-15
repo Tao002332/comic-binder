@@ -39,6 +39,7 @@ def convert_kindle_file(
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
         )
 
         last_pct = 5

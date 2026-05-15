@@ -88,6 +88,7 @@ def _get_ebook_meta_title(azw_path: str, ebook_meta_path: str = "ebook-meta") ->
             text=True,
             encoding="utf-8",
             timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():
