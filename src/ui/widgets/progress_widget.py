@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from src.core.task_manager import TaskItem, TaskStatus
 from src.utils.comic_grouper import extract_comic_name
+from src.ui.widgets.custom_tooltip import install as install_tip
 
 
 class _GlassProgressPanel(QFrame):
@@ -44,6 +45,9 @@ class _GlassProgressPanel(QFrame):
 
         title = QLabel(comic_name)
         title.setStyleSheet("font-size: 15px; font-weight: 590; color: #1c1c1e; background: transparent; border: none;")
+        title.setMaximumWidth(180)
+        title.setWordWrap(False)
+        install_tip(title, comic_name)
         hl.addWidget(title)
 
         hl.addStretch()
@@ -166,6 +170,9 @@ class _MiniBar(QFrame):
         top = QHBoxLayout()
         nl = QLabel(name)
         nl.setStyleSheet("font-size: 12px; font-weight: 480; color: #3c3c43; background: transparent;")
+        nl.setMaximumWidth(200)
+        nl.setWordWrap(False)
+        install_tip(nl, name)
         top.addWidget(nl)
         top.addStretch()
         self._sl = QLabel("等待中")

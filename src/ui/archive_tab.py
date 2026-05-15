@@ -287,9 +287,15 @@ class ArchiveTab(QWidget):
 
         output_dir = getattr(self, "_pending_output_dir", "")
         if output_dir and os.path.isdir(output_dir):
+            pdf_files = [f for f in os.listdir(output_dir) if f.lower().endswith('.pdf')]
             count = organize_comics_into_folders(output_dir, {".pdf"})
             if count > 0:
                 QMessageBox.information(self, "归类完成", f"已将 {count} 部漫画归入对应文件夹。\n输出目录：{output_dir}")
+            elif len(pdf_files) >= 2:
+                QMessageBox.information(self, "转换完成",
+                    f"共 {len(pdf_files)} 个文件已输出，但未找到可归类的同名漫画。\n"
+                    f"请检查文件名是否包含卷/话编号（如：海贼王 卷1.pdf）\n"
+                    f"输出目录：{output_dir}")
             else:
                 QMessageBox.information(self, "转换完成", f"所有文件已输出到：{output_dir}")
 

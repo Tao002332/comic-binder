@@ -349,9 +349,15 @@ class KindleTab(QWidget):
         output_format = getattr(self, "_pending_output_format", "PDF")
         ext = f".{output_format.lower()}"
         if output_dir and os.path.isdir(output_dir):
+            out_files = [f for f in os.listdir(output_dir) if f.lower().endswith(ext)]
             count = organize_comics_into_folders(output_dir, {ext})
             if count > 0:
                 QMessageBox.information(self, "归类完成", f"已将 {count} 部漫画归入对应文件夹。\n输出目录：{output_dir}")
+            elif len(out_files) >= 2:
+                QMessageBox.information(self, "转换完成",
+                    f"共 {len(out_files)} 个文件已输出，但未找到可归类的同名漫画。\n"
+                    f"请检查文件名是否包含卷/话编号。\n"
+                    f"输出目录：{output_dir}")
             else:
                 QMessageBox.information(self, "转换完成", f"所有文件已输出到：{output_dir}")
 

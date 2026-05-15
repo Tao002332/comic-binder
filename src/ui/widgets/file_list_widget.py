@@ -329,10 +329,11 @@ class _GlassPanel(QFrame):
             return
         item = self._table.item(row, col)
         if item:
-            pos = self._table.viewport().mapToGlobal(
-                self._table.visualItemRect(item).bottomRight()
-            )
-            _get_tip().show_text(pos, item.text())
+            rect = self._table.visualItemRect(item)
+            pos = self._table.viewport().mapToGlobal(rect.topLeft())
+            pos.setY(pos.y() - _get_tip().height() - 4)
+            _get_tip().show_text(item.text(), None)
+            _get_tip().move(pos)
 
     def eventFilter(self, obj, event):
         if obj is self._table.viewport():

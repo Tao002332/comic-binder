@@ -77,6 +77,8 @@ class TaskManager(QObject):
         self._active_count = 0
         self._pending_tasks: list[TaskItem] = []
         self._worker_fn: Callable | None = None
+        self._total_count = 0
+        self._done_count = 0
         self._signals.task_finished.connect(self._on_task_done_slot)
 
     @property
@@ -130,16 +132,19 @@ class TaskManager(QObject):
 
         self._pending_tasks = list(pending)
         self._active_count = 0
+        self._total_count = len(pending)
+        self._done_count = 0
 
         for _ in range(min(self._max_workers, len(self._pending_tasks))):
             self._start_next()
 
     def _on_task_done_slot(self, _task_id: str, _success: bool, _msg: str):
-        if self._worker_fn is None or not self._pending_tasks and self._active_count <= 0:
+        if self._worker_fn is None:
             return
+        self._done_count += 1
         self._active_count = max(0, self._active_count - 1)
         self._start_next()
-        if self._active_count <= 0 and not self._pending_tasks:
+        if self._done_count >= self._total_count:
             self._signals.all_finished.emit()
             self._worker_fn = None
 

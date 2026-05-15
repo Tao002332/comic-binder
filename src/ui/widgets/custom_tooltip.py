@@ -37,10 +37,12 @@ class TipLabel(QLabel):
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.hide)
 
-    def show_text(self, global_pos: QPoint, text: str):
+    def show_text(self, text: str, widget: QWidget = None):
         self.setText(text)
         self.adjustSize()
-        self.move(global_pos)
+        if widget:
+            pos = widget.mapToGlobal(QPoint(12, -self.height() - 4))
+            self.move(pos)
         self.show()
         self.raise_()
         self._timer.start(5000)
@@ -68,8 +70,8 @@ class HoverTip(QObject):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.Enter:
-            pos = self._widget.mapToGlobal(QPoint(12, self._widget.height() + 6))
-            _get_tip().show_text(pos, self._text)
+            tip = _get_tip()
+            tip.show_text(self._text, self._widget)
         elif event.type() == QEvent.Type.Leave:
             _get_tip().hide()
         return False
