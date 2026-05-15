@@ -128,25 +128,10 @@ def main():
             selection-color: #007aff;
         }
 
-        /* ---- CheckBox (global fallback) ---- */
+        /* ---- CheckBox (global, mostly handled by AnimatedCheckBox) ---- */
         QCheckBox {
             spacing: 8px;
-            font-size: 14px;
             color: #3c3c43;
-        }
-        QCheckBox::indicator {
-            width: 22px;
-            height: 22px;
-            border: 2px solid rgba(0,0,0,0.20);
-            border-radius: 6px;
-            background-color: #ffffff;
-        }
-        QCheckBox::indicator:checked {
-            background-color: #007aff;
-            border-color: #007aff;
-        }
-        QCheckBox::indicator:hover {
-            border-color: #007aff;
         }
 
         /* ---- Scrollbars ---- */

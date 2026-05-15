@@ -26,7 +26,14 @@
       "Bash(python -m py_compile main.py src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py src/ui/main_window.py)",
       "Bash(python -m py_compile src/ui/widgets/file_list_widget.py src/ui/widgets/progress_widget.py main.py)",
       "Bash(python -m py_compile src/ui/widgets/file_list_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py)",
-      "Bash(python -m py_compile src/ui/widgets/progress_widget.py)"
+      "Bash(python -m py_compile src/ui/widgets/progress_widget.py)",
+      "Bash(python -m py_compile main.py src/ui/widgets/file_list_widget.py src/ui/kindle_tab.py src/core/kindle_converter.py)",
+      "Bash(python -m py_compile src/ui/widgets/animated_checkbox.py src/ui/widgets/file_list_widget.py src/ui/archive_tab.py src/ui/kindle_tab.py main.py)",
+      "Bash(python -m py_compile src/ui/widgets/animated_checkbox.py)",
+      "Bash(python -m py_compile src/ui/widgets/animated_checkbox.py src/ui/widgets/file_list_widget.py)",
+      "Bash(python -m py_compile src/ui/archive_tab.py src/ui/kindle_tab.py src/core/archive_converter.py src/core/kindle_converter.py)",
+      "Bash(python -m py_compile src/ui/widgets/animated_checkbox.py src/ui/kindle_tab.py)",
+      "Bash(python -m py_compile src/ui/archive_tab.py src/ui/kindle_tab.py)"
     ]
   }
 }

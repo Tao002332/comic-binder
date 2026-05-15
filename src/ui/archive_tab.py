@@ -6,9 +6,10 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-    QPushButton, QFileDialog, QCheckBox, QMessageBox, QLabel,
+    QPushButton, QFileDialog, QMessageBox, QLabel,
     QStackedWidget, QFrame,
 )
+from src.ui.widgets.animated_checkbox import AnimatedCheckBox
 
 from src.core.archive_scanner import scan_archives, ArchiveFile
 from src.core.archive_converter import convert_archive_to_pdf
@@ -109,7 +110,7 @@ class ArchiveTab(QWidget):
         s2_layout.addWidget(self._file_list)
 
         bottom_row = QHBoxLayout()
-        self._delete_source_cb = QCheckBox("转换完成后删除源压缩包")
+        self._delete_source_cb = AnimatedCheckBox("转换完成后删除源压缩包")
         bottom_row.addWidget(self._delete_source_cb)
         bottom_row.addStretch()
 
@@ -271,6 +272,10 @@ class ArchiveTab(QWidget):
             task.status_text = message
             if not success:
                 task.error_message = message
+                QMessageBox.critical(
+                    self, "转换失败",
+                    f"文件：{task.name}\n位置：{task_id}\n原因：{message}"
+                )
             self._progress_widget.update_task(task)
 
     def _on_all_finished(self):
@@ -281,7 +286,11 @@ class ArchiveTab(QWidget):
 
         output_dir = getattr(self, "_pending_output_dir", "")
         if output_dir and os.path.isdir(output_dir):
-            organize_comics_into_folders(output_dir, {".pdf"})
+            count = organize_comics_into_folders(output_dir, {".pdf"})
+            if count > 0:
+                QMessageBox.information(self, "归类完成", f"已将 {count} 部漫画归入对应文件夹。\n输出目录：{output_dir}")
+            else:
+                QMessageBox.information(self, "转换完成", f"所有文件已输出到：{output_dir}")
 
     def _cancel(self):
         self._task_manager.cancel_all()

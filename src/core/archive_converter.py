@@ -30,7 +30,7 @@ def convert_archive_to_pdf(
         progress_cb(30, "正在查找图片...")
         image_paths = _collect_images(temp_dir)
         if not image_paths:
-            raise ValueError("压缩包中未找到图片文件")
+            raise ValueError(f"压缩包中未找到图片文件\n文件：{archive_path}")
 
         image_paths = natsorted(image_paths)
 

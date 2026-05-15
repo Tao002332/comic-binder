@@ -53,10 +53,10 @@ def convert_kindle_file(
         process.wait()
 
         if process.returncode != 0:
-            raise RuntimeError(f"ebook-convert 异常退出，返回码：{process.returncode}")
+            raise RuntimeError(f"ebook-convert 异常退出\n文件：{azw_path}\n返回码：{process.returncode}")
 
         if not os.path.isfile(output_path):
-            raise RuntimeError("输出文件未生成")
+            raise RuntimeError(f"输出文件未生成\n源文件：{azw_path}\n预期输出：{output_path}")
 
     except FileNotFoundError:
         raise RuntimeError(
@@ -64,7 +64,7 @@ def convert_kindle_file(
         )
 
     if delete_source and folder_path:
-        progress_cb(90, "正在删除源文件...")
+        progress_cb(90, "正在删除 Kindle 缓存源文件夹...")
         try:
             if os.path.isdir(folder_path):
                 shutil.rmtree(folder_path, ignore_errors=True)

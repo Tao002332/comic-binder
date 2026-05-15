@@ -8,30 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.utils.comic_grouper import extract_comic_name
-
-_CB_STYLE = """
-    QCheckBox {
-        spacing: 0px;
-        margin: 0px;
-        padding: 0px;
-    }
-    QCheckBox::indicator {
-        width: 20px;
-        height: 20px;
-        border: 2px solid rgba(0,0,0,0.22);
-        border-radius: 5px;
-        background-color: rgba(255,255,255,0.90);
-    }
-    QCheckBox::indicator:checked {
-        background-color: #007aff;
-        border-color: #007aff;
-    }
-    QCheckBox::indicator:hover {
-        border-color: #007aff;
-        background-color: rgba(0,122,255,0.06);
-    }
-"""
-
+from src.ui.widgets.animated_checkbox import AnimatedCheckBox
 
 class _GlassPanel(QFrame):
     """iOS-style glass card for one comic group."""
@@ -68,9 +45,8 @@ class _GlassPanel(QFrame):
         hl.setSpacing(10)
         hl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self._group_cb = QCheckBox()
+        self._group_cb = AnimatedCheckBox()
         self._group_cb.setChecked(True)
-        self._group_cb.setStyleSheet(_CB_STYLE)
         hl.addWidget(self._group_cb)
 
         title = QLabel(comic_name)
@@ -106,8 +82,22 @@ class _GlassPanel(QFrame):
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setVisible(False)
+        self._table.horizontalHeader().setVisible(True)
+        self._table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._table.horizontalHeader().setFixedHeight(32)
+        self._table.horizontalHeader().setStyleSheet("""
+            QHeaderView::section {
+                background: rgba(0,0,0,0.03);
+                color: #8e8e93;
+                padding: 6px 8px;
+                border: none;
+                border-bottom: 1px solid rgba(0,0,0,0.06);
+                font-size: 11px;
+                font-weight: 600;
+            }
+        """)
         self._table.setShowGrid(False)
+        self._table.setMouseTracking(True)
         self._table.setStyleSheet("""
             QTableWidget {
                 border: none;
@@ -115,14 +105,14 @@ class _GlassPanel(QFrame):
                 alternate-background-color: rgba(0,0,0,0.02);
             }
             QTableWidget::item {
-                padding: 9px 8px;
+                padding: 12px 8px;
                 border-bottom: 0.5px solid rgba(0,0,0,0.04);
                 font-size: 13px;
                 color: #3c3c43;
                 background: transparent;
             }
             QTableWidget::item:selected {
-                background-color: rgba(0,122,255,0.12);
+                background-color: rgba(168, 85, 247, 0.06);
                 color: #1c1c1e;
             }
         """)
@@ -174,6 +164,9 @@ class _GlassPanel(QFrame):
         self._table.setColumnCount(len(columns) + 1)
         self._table.setRowCount(0)
 
+        labels = [""] + list(columns)
+        self._table.setHorizontalHeaderLabels(labels)
+
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(0, 42)
@@ -193,9 +186,8 @@ class _GlassPanel(QFrame):
             self._table.insertRow(row)
             self._table.setRowHeight(row, 42)
 
-            cb = QCheckBox()
+            cb = AnimatedCheckBox()
             cb.setChecked(item.get("selected", True))
-            cb.setStyleSheet(_CB_STYLE)
             cb.toggled.connect(lambda checked, r=idx: self._on_file_toggle(r, checked))
             self._table.setCellWidget(row, 0, _center_widget(cb))
 
