@@ -304,17 +304,29 @@ class KindleTab(QWidget):
 
             if duplicates:
                 self._file_list.set_data(self._file_list.get_data())
-                reply = QMessageBox.question(
-                    self, "发现同名文件",
-                    f"发现 {len(duplicates)} 个同名文件已存在：\n\n" +
+                msg = QMessageBox(self)
+                msg.setWindowTitle("发现同名文件")
+                msg.setText(f"发现 {len(duplicates)} 个同名文件已存在：\n\n" +
                     "\n".join(f"  • {os.path.basename(d)}" for d in duplicates[:10]) +
-                    ("\n  ..." if len(duplicates) > 10 else "") +
-                    "\n\n是否覆盖继续？",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No
-                )
-                if reply != QMessageBox.StandardButton.Yes:
+                    ("\n  ..." if len(duplicates) > 10 else ""))
+                btn_overwrite = msg.addButton("覆盖全部", QMessageBox.ButtonRole.AcceptRole)
+                btn_skip = msg.addButton("跳过同名", QMessageBox.ButtonRole.DestructiveRole)
+                btn_cancel = msg.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+                msg.setDefaultButton(btn_cancel)
+                msg.exec()
+
+                clicked = msg.clickedButton()
+                if clicked == btn_cancel:
                     return
+                elif clicked == btn_skip:
+                    dup_set = set(duplicates)
+                    for comic in list(groups.keys()):
+                        groups[comic] = [it for it in groups[comic]
+                                         if self._kf_out_path(it, output_dir, output_format, len(groups[comic])) not in dup_set]
+                        if not groups[comic]:
+                            del groups[comic]
+                    if not groups:
+                        return
 
             self._task_manager.clear_tasks()
             self._progress_widget.clear()
@@ -352,6 +364,19 @@ class KindleTab(QWidget):
             self._task_manager.run(self._worker_fn)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"启动转换失败：{e}")
+
+    def _kf_out_path(self, item: dict, base_dir: str, fmt: str, group_size: int) -> str:
+        kf: KindleFile = item["_kindle"]
+        name = item.get("解析标题") or item.get("原始ID") or ""
+        from src.utils.comic_grouper import extract_comic_name
+        comic = extract_comic_name(name)
+        outdir = os.path.join(base_dir, comic) if group_size >= 2 else base_dir
+        from src.core.kindle_converter import _sanitize_filename
+        if kf.parsed_title:
+            base = _sanitize_filename(kf.parsed_title)
+        else:
+            base = os.path.splitext(os.path.basename(kf.azw_path))[0]
+        return os.path.join(outdir, f"{base}.{fmt.lower()}")
 
     def _worker_fn(self, task, progress_cb):
         convert_kindle_file(

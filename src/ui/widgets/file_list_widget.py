@@ -11,8 +11,9 @@ from src.utils.comic_grouper import extract_comic_name
 from src.ui.widgets.animated_checkbox import AnimatedCheckBox
 from src.ui.widgets.custom_tooltip import install as install_tip, _get_tip
 
-_PAGE_SIZE = 6
-_MIN_SCROLL_ROWS = 3
+_PAGE_SIZE = 5
+_MIN_SCROLL_ROWS = 5
+_GROUP_PAGE_SIZE = 5
 
 
 class _GlassPanel(QFrame):
@@ -426,6 +427,30 @@ class FileListWidget(QWidget):
         scroll.setWidget(self._container)
         layout.addWidget(scroll, stretch=1)
 
+        # Group pagination bar
+        self._group_page_bar = QFrame()
+        self._group_page_bar.setVisible(False)
+        gpl = QHBoxLayout(self._group_page_bar)
+        gpl.setContentsMargins(0, 2, 0, 0)
+        gpl.setSpacing(4)
+        gpl.addStretch()
+        self._gp_prev = QPushButton("<")
+        self._gp_prev.setFixedWidth(28)
+        self._gp_prev.clicked.connect(self._gp_prev_page)
+        gpl.addWidget(self._gp_prev)
+        self._gp_label = QLabel("1/1")
+        self._gp_label.setStyleSheet("font-size: 11px; color: #8e8e93; background: transparent;")
+        gpl.addWidget(self._gp_label)
+        self._gp_next = QPushButton(">")
+        self._gp_next.setFixedWidth(28)
+        self._gp_next.clicked.connect(self._gp_next_page)
+        gpl.addWidget(self._gp_next)
+        gpl.addStretch()
+        layout.addWidget(self._group_page_bar)
+
+        self._group_page = 0
+        self._all_group_names: list[str] = []
+
     @property
     def search_input(self):
         return self._search
@@ -465,14 +490,39 @@ class FileListWidget(QWidget):
         self._panels.clear()
 
         ft = self._search.text().strip().lower()
+
+        # Collect all visible groups
+        all_visible: list[tuple[str, list[int]]] = []
         for comic, indices in self._groups.items():
             visible = [i for i in indices if not ft or
                        ft in comic.lower() or
                        ft in " ".join(str(v) for k, v in self._data[i].items()
                                        if k not in ("selected", "_archive", "_kindle")).lower()]
-            if not visible:
-                continue
+            if visible:
+                all_visible.append((comic, visible))
 
+        self._all_group_names = [c for c, _ in all_visible]
+        total_groups = len(all_visible)
+
+        # Paginate groups if needed
+        use_group_pages = self._grouped and total_groups > _GROUP_PAGE_SIZE
+        self._group_page_bar.setVisible(use_group_pages)
+
+        if use_group_pages:
+            if self._group_page >= max(1, (total_groups + _GROUP_PAGE_SIZE - 1) // _GROUP_PAGE_SIZE):
+                self._group_page = 0
+            start = self._group_page * _GROUP_PAGE_SIZE
+            end = min(start + _GROUP_PAGE_SIZE, total_groups)
+            page_groups = all_visible[start:end]
+            total_pages = max(1, (total_groups + _GROUP_PAGE_SIZE - 1) // _GROUP_PAGE_SIZE)
+            self._gp_label.setText(f"{self._group_page + 1}/{total_pages}")
+            self._gp_prev.setEnabled(self._group_page > 0)
+            self._gp_next.setEnabled(self._group_page < total_pages - 1)
+        else:
+            self._group_page = 0
+            page_groups = all_visible
+
+        for comic, visible in page_groups:
             collapsible = self._grouped and comic != ""
             title = comic if comic else "全部文件"
             panel = _GlassPanel(title, collapsible=collapsible)
@@ -482,6 +532,17 @@ class FileListWidget(QWidget):
             self._panels[comic] = panel
 
         self._update_count()
+
+    def _gp_prev_page(self):
+        if self._group_page > 0:
+            self._group_page -= 1
+            self._rebuild_panels()
+
+    def _gp_next_page(self):
+        total_pages = max(1, (len(self._all_group_names) + _GROUP_PAGE_SIZE - 1) // _GROUP_PAGE_SIZE)
+        if self._group_page < total_pages - 1:
+            self._group_page += 1
+            self._rebuild_panels()
 
     def _on_search(self):
         self._rebuild_panels()
