@@ -33,7 +33,11 @@
       "Bash(python -m py_compile src/ui/widgets/animated_checkbox.py src/ui/widgets/file_list_widget.py)",
       "Bash(python -m py_compile src/ui/archive_tab.py src/ui/kindle_tab.py src/core/archive_converter.py src/core/kindle_converter.py)",
       "Bash(python -m py_compile src/ui/widgets/animated_checkbox.py src/ui/kindle_tab.py)",
-      "Bash(python -m py_compile src/ui/archive_tab.py src/ui/kindle_tab.py)"
+      "Bash(python -m py_compile src/ui/archive_tab.py src/ui/kindle_tab.py)",
+      "Bash(pyinstaller --name \"ComicBinder\" --noconsole --onedir --hidden-import src --hidden-import src.core --hidden-import src.core.archive_scanner --hidden-import src.core.archive_converter --hidden-import src.core.kindle_scanner --hidden-import src.core.kindle_converter --hidden-import src.core.task_manager --hidden-import src.ui --hidden-import src.ui.main_window --hidden-import src.ui.archive_tab --hidden-import src.ui.kindle_tab --hidden-import src.ui.widgets --hidden-import src.ui.widgets.file_list_widget --hidden-import src.ui.widgets.progress_widget --hidden-import src.ui.widgets.animated_checkbox --hidden-import src.utils --hidden-import src.utils.helpers --hidden-import src.utils.settings --hidden-import src.utils.comic_grouper --hidden-import rarfile --hidden-import py7zr --hidden-import natsort --hidden-import img2pdf --hidden-import patoolib --add-data \"requirements.txt;.\" main.py)",
+      "Bash(\"E:/comic-binder/dist/ComicBinder/ComicBinder.exe\")",
+      "Bash(rm -rf build dist)",
+      "Bash(pyinstaller --name \"ComicBinder\" --noconsole --onedir --icon \"comic_binder.ico\" --hidden-import src --hidden-import src.core --hidden-import src.core.archive_scanner --hidden-import src.core.archive_converter --hidden-import src.core.kindle_scanner --hidden-import src.core.kindle_converter --hidden-import src.core.task_manager --hidden-import src.ui --hidden-import src.ui.main_window --hidden-import src.ui.archive_tab --hidden-import src.ui.kindle_tab --hidden-import src.ui.widgets --hidden-import src.ui.widgets.file_list_widget --hidden-import src.ui.widgets.progress_widget --hidden-import src.ui.widgets.animated_checkbox --hidden-import src.utils --hidden-import src.utils.helpers --hidden-import src.utils.settings --hidden-import src.utils.comic_grouper --hidden-import rarfile --hidden-import py7zr --hidden-import natsort --hidden-import img2pdf --hidden-import patoolib --add-data \"comic_binder.ico;.\" main.py)"
     ]
   }
 }

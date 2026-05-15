@@ -1,4 +1,5 @@
-import sys
+import sys, os
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from src.ui.main_window import MainWindow
 
@@ -6,6 +7,15 @@ from src.ui.main_window import MainWindow
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Comic Binder")
+
+    # Set app icon (taskbar + window)
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(__file__)
+    icon_path = os.path.join(base, "comic_binder.ico")
+    if os.path.isfile(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     app.setStyleSheet("""
         * {
