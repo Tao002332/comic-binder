@@ -102,9 +102,10 @@ class ArchiveTab(QWidget):
         self._step2 = QWidget()
         s2_layout = QVBoxLayout(self._step2)
         s2_layout.setContentsMargins(0, 0, 0, 0)
+        s2_layout.setSpacing(4)
 
         self._file_list = FileListWidget(
-            columns=["文件名", "大小", "类型", "状态"],
+            columns=["文件名", "漫画名称", "大小", "类型", "状态"],
             grouped=False
         )
 
@@ -195,8 +196,11 @@ class ArchiveTab(QWidget):
 
         data = []
         for af in self._archive_files:
+            from src.utils.comic_grouper import extract_comic_name
+            noext = af.name.rsplit(".", 1)[0] if "." in af.name else af.name
             data.append({
                 "文件名": af.name,
+                "漫画名称": extract_comic_name(noext),
                 "大小": af.size_display,
                 "类型": af.archive_type,
                 "状态": "就绪",
@@ -338,10 +342,6 @@ class ArchiveTab(QWidget):
             task.status_text = message
             if not success:
                 task.error_message = message
-                QMessageBox.critical(
-                    self, "转换失败",
-                    f"文件：{task.name}\n位置：{task_id}\n原因：{message}"
-                )
             self._progress_widget.update_task(task)
 
     def _on_all_finished(self):
@@ -352,17 +352,7 @@ class ArchiveTab(QWidget):
 
         output_dir = getattr(self, "_pending_output_dir", "")
         if output_dir and os.path.isdir(output_dir):
-            pdf_files = [f for f in os.listdir(output_dir) if f.lower().endswith('.pdf')]
-            count = organize_comics_into_folders(output_dir, {".pdf"})
-            if count > 0:
-                QMessageBox.information(self, "归类完成", f"已将 {count} 部漫画归入对应文件夹。\n输出目录：{output_dir}")
-            elif len(pdf_files) >= 2:
-                QMessageBox.information(self, "转换完成",
-                    f"共 {len(pdf_files)} 个文件已输出，但未找到可归类的同名漫画。\n"
-                    f"请检查文件名是否包含卷/话编号（如：海贼王 卷1.pdf）\n"
-                    f"输出目录：{output_dir}")
-            else:
-                QMessageBox.information(self, "转换完成", f"所有文件已输出到：{output_dir}")
+            organize_comics_into_folders(output_dir, {".pdf"})
 
     def _cancel(self):
         self._task_manager.cancel_all()

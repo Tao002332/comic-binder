@@ -1,207 +1,15 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QScrollArea, QProgressBar, QLabel,
-    QFrame, QHBoxLayout, QCheckBox, QPushButton,
+    QFrame, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
+    QHeaderView, QAbstractItemView,
 )
 
 from src.core.task_manager import TaskItem, TaskStatus
 from src.utils.comic_grouper import extract_comic_name
-from src.ui.widgets.custom_tooltip import install as install_tip
-
-
-class _GlassProgressPanel(QFrame):
-    """iOS glass card for one comic group's progress."""
-
-    def __init__(self, comic_name: str, parent=None):
-        super().__init__(parent)
-        self._comic = comic_name
-        self._collapsed = False
-        self._cards: dict[str, _MiniBar] = {}
-
-        self.setObjectName("glassProgressPanel")
-        self.setStyleSheet("""
-            QFrame#glassProgressPanel {
-                background: rgba(255,255,255,0.72);
-                border: 0.5px solid rgba(0,0,0,0.06);
-                border-radius: 16px;
-                margin: 4px 0px;
-            }
-        """)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        # Header
-        self._header = QFrame()
-        self._header.setFixedHeight(50)
-        self._header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._header.setStyleSheet("background: transparent; border: none; border-radius: 16px;")
-        hl = QHBoxLayout(self._header)
-        hl.setContentsMargins(16, 0, 10, 0)
-        hl.setSpacing(10)
-
-        title = QLabel(comic_name)
-        title.setStyleSheet("font-size: 15px; font-weight: 590; color: #1c1c1e; background: transparent; border: none;")
-        title.setMaximumWidth(180)
-        title.setWordWrap(False)
-        install_tip(title, comic_name)
-        hl.addWidget(title)
-
-        hl.addStretch()
-
-        self._info = QLabel("")
-        self._info.setStyleSheet("font-size: 12px; font-weight: 480; color: #8e8e93; background: transparent; border: none;")
-        hl.addWidget(self._info)
-
-        self._group_bar = QProgressBar()
-        self._group_bar.setRange(0, 100)
-        self._group_bar.setFixedSize(120, 6)
-        self._group_bar.setTextVisible(False)
-        self._group_bar.setStyleSheet("""
-            QProgressBar {
-                border: none; border-radius: 3px; background: rgba(0,0,0,0.06);
-            }
-            QProgressBar::chunk { border-radius: 3px; background: #007aff; }
-        """)
-        hl.addWidget(self._group_bar)
-
-        self._chevron = QPushButton()
-        self._chevron.setFlat(True)
-        self._chevron.setFixedSize(28, 28)
-        self._chevron.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._chevron.clicked.connect(self._toggle)
-        self._set_chevron_collapsed()
-        hl.addWidget(self._chevron)
-
-        self._header.mousePressEvent = lambda e: self._toggle()
-        outer.addWidget(self._header)
-
-        # Body
-        self._body = QFrame()
-        self._body.setStyleSheet("background: transparent; border: none; border-radius: 0px 0px 16px 16px;")
-        self._body_lay = QVBoxLayout(self._body)
-        self._body_lay.setContentsMargins(16, 0, 16, 12)
-        self._body_lay.setSpacing(4)
-        outer.addWidget(self._body)
-
-    def _set_chevron_collapsed(self):
-        self._chevron.setText("›")
-        self._chevron.setStyleSheet("""
-            QPushButton {
-                font-size: 20px; font-weight: 200; color: #aeaeb2;
-                border: none; background: transparent; padding: 0px;
-            }
-            QPushButton:hover { color: #3c3c43; }
-        """)
-
-    def _set_chevron_expanded(self):
-        self._chevron.setText("⌄")
-        self._chevron.setStyleSheet("""
-            QPushButton {
-                font-size: 16px; font-weight: 400; color: #007aff;
-                border: none; background: transparent; padding: 0px;
-            }
-            QPushButton:hover { color: #0055cc; }
-        """)
-
-    def _toggle(self):
-        self._collapsed = not self._collapsed
-        self._body.setVisible(not self._collapsed)
-        if self._collapsed:
-            self._set_chevron_collapsed()
-        else:
-            self._set_chevron_expanded()
-
-    def add_card(self, tid: str, name: str):
-        card = _MiniBar(tid, name)
-        self._body_lay.addWidget(card)
-        self._cards[tid] = card
-
-    def update_card(self, task: TaskItem):
-        c = self._cards.get(task.task_id)
-        if c:
-            c.update_from_task(task)
-        self._recalc()
-
-    def _recalc(self):
-        if not self._cards:
-            return
-        vals = [c._bar.value() for c in self._cards.values()]
-        avg = sum(vals) // len(vals)
-        self._group_bar.setValue(avg)
-
-        done = sum(1 for c in self._cards.values() if c._status == "done")
-        err = sum(1 for c in self._cards.values() if c._status == "error")
-        run = len(self._cards) - done - err
-
-        if done == len(self._cards):
-            self._group_bar.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: rgba(52,199,89,0.12); } QProgressBar::chunk { border-radius: 3px; background: #34c759; }")
-            self._info.setText(f"{len(self._cards)} 文件 · 全部完成")
-        elif err and run == 0:
-            self._group_bar.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: rgba(255,59,48,0.12); } QProgressBar::chunk { border-radius: 3px; background: #ff3b30; }")
-            self._info.setText(f"{len(self._cards)} 文件 · {err} 失败")
-        else:
-            self._group_bar.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: rgba(0,0,0,0.06); } QProgressBar::chunk { border-radius: 3px; background: #007aff; }")
-            self._info.setText(f"{len(self._cards)} 文件 · {run} 处理中")
-
-    def cards(self):
-        return self._cards
-
-    def has_task(self, tid):
-        return tid in self._cards
-
-
-class _MiniBar(QFrame):
-    """Single file progress row."""
-
-    def __init__(self, tid: str, name: str, parent=None):
-        super().__init__(parent)
-        self.task_id = tid
-        self._status = "pending"
-        self.setStyleSheet("background: transparent; border: none;")
-
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 4, 0, 4)
-        lay.setSpacing(4)
-
-        top = QHBoxLayout()
-        nl = QLabel(name)
-        nl.setStyleSheet("font-size: 12px; font-weight: 480; color: #3c3c43; background: transparent;")
-        nl.setMaximumWidth(200)
-        nl.setWordWrap(False)
-        install_tip(nl, name)
-        top.addWidget(nl)
-        top.addStretch()
-        self._sl = QLabel("等待中")
-        self._sl.setStyleSheet("font-size: 11px; color: #8e8e93; background: transparent;")
-        top.addWidget(self._sl)
-        lay.addLayout(top)
-
-        self._bar = QProgressBar()
-        self._bar.setRange(0, 100)
-        self._bar.setFixedHeight(4)
-        self._bar.setTextVisible(False)
-        self._bar.setStyleSheet("QProgressBar { border: none; border-radius: 2px; background: rgba(0,0,0,0.06); } QProgressBar::chunk { border-radius: 2px; background: #007aff; }")
-        lay.addWidget(self._bar)
-
-    def update_from_task(self, task: TaskItem):
-        self._bar.setValue(task.progress)
-        lb = {"pending": "等待中", "running": "处理中", "done": "已完成", "error": "失败"}
-        self._status = task.status.value
-        self._sl.setText(lb.get(self._status, self._status))
-
-        if self._status == "done":
-            self._sl.setStyleSheet("font-size: 11px; color: #34c759; font-weight: 540; background: transparent;")
-            self._bar.setStyleSheet("QProgressBar { border: none; border-radius: 2px; background: rgba(52,199,89,0.12); } QProgressBar::chunk { border-radius: 2px; background: #34c759; }")
-        elif self._status == "error":
-            self._sl.setStyleSheet("font-size: 11px; color: #ff3b30; font-weight: 540; background: transparent;")
-            self._bar.setStyleSheet("QProgressBar { border: none; border-radius: 2px; background: rgba(255,59,48,0.12); } QProgressBar::chunk { border-radius: 2px; background: #ff3b30; }")
-        elif self._status == "running":
-            self._sl.setStyleSheet("font-size: 11px; color: #007aff; font-weight: 540; background: transparent;")
-            self._bar.setStyleSheet("QProgressBar { border: none; border-radius: 2px; background: rgba(0,0,0,0.06); } QProgressBar::chunk { border-radius: 2px; background: #007aff; }")
+from src.ui.widgets.custom_tooltip import _get_tip
 
 
 class ProgressWidget(QWidget):
@@ -210,7 +18,7 @@ class ProgressWidget(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # Overall card
         ov = QFrame()
@@ -236,53 +44,127 @@ class ProgressWidget(QWidget):
         ovl.addWidget(self._overall_lbl)
         layout.addWidget(ov)
 
-        # Panels
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._container = QWidget()
-        self._container.setStyleSheet("background: transparent;")
-        self._container_lay = QVBoxLayout(self._container)
-        self._container_lay.setContentsMargins(0, 0, 0, 0)
-        self._container_lay.setSpacing(6)
-        self._container_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self._container_lay.addStretch()
-        scroll.setWidget(self._container)
-        layout.addWidget(scroll, stretch=1)
+        # Table
+        self._table = QTableWidget()
+        self._table.setColumnCount(5)
+        self._table.setHorizontalHeaderLabels(["文件名", "漫画名", "状态", "错误原因", "进度"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setShowGrid(True)
+        self._table.setMouseTracking(True)
+        self._table.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+        hh = self._table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self._table.setColumnWidth(2, 72)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self._table.setColumnWidth(4, 140)
+        hh.setFixedHeight(32)
+        hh.setStyleSheet("""
+            QHeaderView::section {
+                background: rgba(0,0,0,0.03); color: #8e8e93; padding: 6px 8px;
+                border: none; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 11px; font-weight: 600;
+            }
+        """)
+        self._table.setStyleSheet("""
+            QTableWidget { border: none; background: transparent; gridline-color: rgba(0,0,0,0.04); }
+            QTableWidget::item { padding: 8px 8px; font-size: 13px; color: #3c3c43; background: transparent; }
+        """)
+        layout.addWidget(self._table, stretch=1)
 
-        self._panels: dict[str, _GlassProgressPanel] = {}
-        self._tid_to_comic: dict[str, str] = {}
+        self._table.cellEntered.connect(self._on_cell_hover)
+        self._table.viewport().installEventFilter(self)
+        self._tasks: dict[str, TaskItem] = {}
+        self._resort_timer = QTimer(self)
+        self._resort_timer.setSingleShot(True)
+        self._resort_timer.setInterval(300)
+        self._resort_timer.timeout.connect(self._rebuild)
 
     def register_task(self, tid: str, name: str):
         comic = extract_comic_name(name)
-        self._tid_to_comic[tid] = comic
-        if comic not in self._panels:
-            p = _GlassProgressPanel(comic)
-            self._container_lay.insertWidget(self._container_lay.count() - 1, p)
-            self._panels[comic] = p
-        self._panels[comic].add_card(tid, name)
+        item = TaskItem(task_id=tid, name=name, metadata={"comic": comic})
+        self._tasks[tid] = item
+        self._resort_timer.start()
 
     def update_task(self, task: TaskItem):
-        comic = self._tid_to_comic.get(task.task_id)
-        if comic and comic in self._panels:
-            self._panels[comic].update_card(task)
+        existing = self._tasks.get(task.task_id)
+        if existing:
+            existing.status = task.status
+            existing.progress = task.progress
+            existing.status_text = task.status_text
+            existing.error_message = task.error_message
+        self._resort_timer.start()
         self._recalc()
 
+    def _rebuild(self):
+        self.setUpdatesEnabled(False)
+        items = sorted(self._tasks.values(), key=lambda t: (
+            t.metadata.get("comic", "").lower(),
+            {"running": 0, "pending": 1, "done": 2, "error": 3}.get(t.status.value, 9),
+            -t.progress
+        ))
+        self._table.setRowCount(0)
+        for row, item in enumerate(items):
+            self._table.insertRow(row)
+            self._table.setRowHeight(row, 38)
+
+            t0 = QTableWidgetItem(item.name)
+            t0.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self._table.setItem(row, 0, t0)
+
+            comic = item.metadata.get("comic", "")
+            t1 = QTableWidgetItem(comic)
+            t1.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self._table.setItem(row, 1, t1)
+
+            labels = {"pending": "等待中", "running": "处理中", "done": "已完成", "error": "失败"}
+            st = item.status.value
+            t2 = QTableWidgetItem(labels.get(st, st))
+            t2.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            if st == "done":
+                t2.setForeground(Qt.GlobalColor.darkGreen)
+            elif st == "error":
+                t2.setForeground(Qt.GlobalColor.red)
+            elif st == "running":
+                t2.setForeground(Qt.GlobalColor.blue)
+            self._table.setItem(row, 2, t2)
+
+            t3 = QTableWidgetItem(item.error_message if st == "error" else "")
+            t3.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            if st == "error":
+                t3.setForeground(Qt.GlobalColor.red)
+            self._table.setItem(row, 3, t3)
+
+            bar = QProgressBar()
+            bar.setRange(0, 100)
+            bar.setValue(item.progress)
+            bar.setTextVisible(True)
+            bar.setFixedHeight(18)
+            if st == "done":
+                bar.setStyleSheet("QProgressBar { border: none; border-radius: 4px; background: #e8f5e9; font-size: 10px; color: #1b5e20; } QProgressBar::chunk { border-radius: 4px; background: #43a047; }")
+            elif st == "error":
+                bar.setStyleSheet("QProgressBar { border: none; border-radius: 4px; background: #fce8e6; font-size: 10px; color: #1c1c1e; } QProgressBar::chunk { border-radius: 4px; background: #e53935; }")
+            elif st == "running":
+                bar.setStyleSheet("QProgressBar { border: none; border-radius: 4px; background: #e3f2fd; font-size: 10px; color: #1c1c1e; } QProgressBar::chunk { border-radius: 4px; background: #007aff; }")
+            else:
+                bar.setStyleSheet("QProgressBar { border: none; border-radius: 4px; background: #f5f5f5; font-size: 10px; color: #9e9e9e; } QProgressBar::chunk { border-radius: 4px; background: #bdbdbd; }")
+            self._table.setCellWidget(row, 4, bar)
+
+        self.setUpdatesEnabled(True)
+
     def _recalc(self):
-        if not self._panels:
+        if not self._tasks:
             self._overall_bar.setValue(0)
             self._overall_lbl.setText("就绪")
             return
-        vals = []
-        done = err = 0
-        for p in self._panels.values():
-            for c in p.cards().values():
-                vals.append(c._bar.value())
-                if c._status == "done": done += 1
-                elif c._status == "error": err += 1
-        if not vals:
-            return
+        vals = [t.progress for t in self._tasks.values()]
         self._overall_bar.setValue(sum(vals) // len(vals))
+        done = sum(1 for t in self._tasks.values() if t.status == TaskStatus.DONE)
+        err = sum(1 for t in self._tasks.values() if t.status == TaskStatus.ERROR)
         run = len(vals) - done - err
         parts = []
         if run: parts.append(f"{run} 处理中")
@@ -291,10 +173,33 @@ class ProgressWidget(QWidget):
         self._overall_lbl.setText(", ".join(parts) if parts else "空闲")
 
     def clear(self):
-        for p in self._panels.values():
-            self._container_lay.removeWidget(p)
-            p.deleteLater()
-        self._panels.clear()
-        self._tid_to_comic.clear()
+        self._tasks.clear()
+        self._table.setRowCount(0)
         self._overall_bar.setValue(0)
         self._overall_lbl.setText("就绪")
+
+    def _on_cell_hover(self, row: int, col: int):
+        if row < 0:
+            _get_tip().hide()
+            return
+        item = self._table.item(row, col)
+        if item and item.text():
+            text = item.text()
+            fm = self._table.fontMetrics()
+            col_w = self._table.columnWidth(col)
+            if fm.horizontalAdvance(text) > col_w - 16:
+                rect = self._table.visualItemRect(item)
+                pos = self._table.viewport().mapToGlobal(rect.topLeft())
+                pos.setY(pos.y() - _get_tip().height() - 4)
+                _get_tip().show_text(text, None)
+                _get_tip().move(pos)
+        else:
+            _get_tip().hide()
+
+    def eventFilter(self, obj, event):
+        if obj is self._table.viewport() and event.type() == QEvent.Type.Leave:
+            _get_tip().hide()
+        return False
+
+    def get_failed_tasks(self) -> list[TaskItem]:
+        return [t for t in self._tasks.values() if t.status == TaskStatus.ERROR]

@@ -22,6 +22,8 @@ class TipLabel(QLabel):
         p.setColor(QPalette.ColorRole.WindowText, QColor("#1c1c1e"))
         self.setPalette(p)
 
+        self.setWordWrap(True)
+        self.setMaximumWidth(400)
         self.setStyleSheet("""
             TipLabel {
                 background-color: #ffffff;
@@ -70,8 +72,12 @@ class HoverTip(QObject):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.Enter:
-            tip = _get_tip()
-            tip.show_text(self._text, self._widget)
+            w = self._widget
+            fm = w.fontMetrics()
+            avail = w.width() - 4
+            if fm.horizontalAdvance(self._text) > avail:
+                tip = _get_tip()
+                tip.show_text(self._text, self._widget)
         elif event.type() == QEvent.Type.Leave:
             _get_tip().hide()
         return False

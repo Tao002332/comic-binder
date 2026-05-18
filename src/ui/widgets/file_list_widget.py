@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import Qt, Signal, QEvent, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QPushButton, QCheckBox, QAbstractItemView,
@@ -11,9 +11,12 @@ from src.utils.comic_grouper import extract_comic_name
 from src.ui.widgets.animated_checkbox import AnimatedCheckBox
 from src.ui.widgets.custom_tooltip import install as install_tip, _get_tip
 
-_PAGE_SIZE = 5
-_MIN_SCROLL_ROWS = 5
-_GROUP_PAGE_SIZE = 5
+def _row_height(table: QTableWidget) -> int:
+    fm = table.fontMetrics()
+    return max(44, fm.height() + 24)
+
+def _header_height(table: QTableWidget) -> int:
+    return table.horizontalHeader().height()
 
 
 class _GlassPanel(QFrame):
@@ -95,6 +98,7 @@ class _GlassPanel(QFrame):
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setVisible(True)
         self._table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -110,13 +114,15 @@ class _GlassPanel(QFrame):
                 font-weight: 600;
             }
         """)
-        self._table.setShowGrid(False)
+        self._table.setShowGrid(True)
         self._table.setMouseTracking(True)
+        self._table.viewport().setCursor(Qt.CursorShape.ArrowCursor)
         self._table.setStyleSheet("""
             QTableWidget {
                 border: none;
                 background: transparent;
                 alternate-background-color: rgba(0,0,0,0.02);
+                gridline-color: rgba(0,0,0,0.04);
             }
             QTableWidget::item {
                 padding: 12px 8px;
@@ -135,27 +141,6 @@ class _GlassPanel(QFrame):
         # Cell tooltip on hover
         self._table.cellEntered.connect(self._on_cell_hover)
         self._table.viewport().installEventFilter(self)
-
-        # Pagination bar (shown when > _PAGE_SIZE files)
-        self._page_bar = QFrame()
-        self._page_bar.setVisible(False)
-        pg_lay = QHBoxLayout(self._page_bar)
-        pg_lay.setContentsMargins(0, 4, 0, 0)
-        pg_lay.setSpacing(4)
-        pg_lay.addStretch()
-        self._page_prev = QPushButton("<")
-        self._page_prev.setFixedWidth(28)
-        self._page_prev.clicked.connect(self._go_prev)
-        pg_lay.addWidget(self._page_prev)
-        self._page_label = QLabel("1/1")
-        self._page_label.setStyleSheet("font-size: 11px; color: #8e8e93; background: transparent;")
-        pg_lay.addWidget(self._page_label)
-        self._page_next = QPushButton(">")
-        self._page_next.setFixedWidth(28)
-        self._page_next.clicked.connect(self._go_next)
-        pg_lay.addWidget(self._page_next)
-        pg_lay.addStretch()
-        body_lay.addWidget(self._page_bar)
 
         outer.addWidget(self._body)
 
@@ -187,45 +172,6 @@ class _GlassPanel(QFrame):
         else:
             self._set_chevron_expanded()
 
-    def _go_prev(self):
-        if self._current_page > 0:
-            self._current_page -= 1
-            self._render_page()
-
-    def _go_next(self):
-        total = max(1, (len(self._file_indices) + _PAGE_SIZE - 1) // _PAGE_SIZE)
-        if self._current_page < total - 1:
-            self._current_page += 1
-            self._render_page()
-
-    def _render_page(self):
-        total = len(self._file_indices)
-        total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
-        start = self._current_page * _PAGE_SIZE
-        end = min(start + _PAGE_SIZE, total)
-        page_indices = self._file_indices[start:end]
-
-        self._table.setRowCount(0)
-        for row, idx in enumerate(page_indices):
-            item = self._data_ref[idx]
-            self._table.insertRow(row)
-            self._table.setRowHeight(row, 42)
-
-            cb = AnimatedCheckBox()
-            cb.setChecked(item.get("selected", True))
-            cb.toggled.connect(lambda checked, r=idx: self._on_file_toggle(r, checked))
-            self._table.setCellWidget(row, 0, _center_widget(cb))
-
-            for ci, col_name in enumerate(self._columns):
-                val = item.get(col_name, "")
-                t = QTableWidgetItem(str(val))
-                t.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self._table.setItem(row, ci + 1, t)
-
-        self._page_label.setText(f"{self._current_page + 1}/{total_pages}")
-        self._page_prev.setEnabled(self._current_page > 0)
-        self._page_next.setEnabled(self._current_page < total_pages - 1)
-
     def set_files(self, indices: list[int], data: list[dict], columns: list[str]):
         self._file_indices = indices
         self._data_ref = data
@@ -238,27 +184,23 @@ class _GlassPanel(QFrame):
 
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self._table.setColumnWidth(0, 42)
+        self._table.setColumnWidth(0, 40)
         for i in range(len(columns)):
             header.setSectionResizeMode(i + 1, QHeaderView.ResizeMode.Stretch)
 
-        # Pagination: show page bar when > _PAGE_SIZE, scroll when > _MIN_SCROLL_ROWS
-        total = len(indices)
-        use_pages = total > _PAGE_SIZE
-        self._page_bar.setVisible(use_pages)
 
-        if use_pages:
-            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            self._table.setMaximumHeight((_PAGE_SIZE + 1) * 42 + 32)
-            self._render_page()
-        elif total > _MIN_SCROLL_ROWS:
-            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            self._table.setMaximumHeight((_MIN_SCROLL_ROWS + 1) * 42 + 32)
-            self._render_all_rows(indices)
-        else:
-            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Auto-height for <=10 rows, fixed 10-row + scrollbar for >10
+        total = len(indices)
+        rh = _row_height(self._table)
+        hh = _header_height(self._table)
+        self._table.setMinimumHeight(hh)
+        if total <= 10:
             self._table.setMaximumHeight(16777215)
-            self._render_all_rows(indices)
+            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        else:
+            self._table.setMaximumHeight(10 * rh + hh)
+            self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._render_all_rows(indices)
 
         all_sel = True
         sel_count = 0
@@ -282,12 +224,18 @@ class _GlassPanel(QFrame):
             item = self._data_ref[idx]
             row = self._table.rowCount()
             self._table.insertRow(row)
-            self._table.setRowHeight(row, 42)
+            self._table.setRowHeight(row, _row_height(self._table))
 
             cb = AnimatedCheckBox()
             cb.setChecked(item.get("selected", True))
             cb.toggled.connect(lambda checked, r=idx: self._on_file_toggle(r, checked))
-            self._table.setCellWidget(row, 0, _center_widget(cb))
+            wrapper = QWidget()
+            wrapper.setStyleSheet("background: transparent;")
+            wl = QHBoxLayout(wrapper)
+            wl.addWidget(cb)
+            wl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            wl.setContentsMargins(0, 0, 0, 0)
+            self._table.setCellWidget(row, 0, wrapper)
 
             for ci, col_name in enumerate(self._columns):
                 val = item.get(col_name, "")
@@ -304,25 +252,17 @@ class _GlassPanel(QFrame):
         self._group_cb.setChecked(all_sel)
         self._group_cb.blockSignals(False)
         self._info.setText(f"{len(self._file_indices)} 个文件 · {sel} 已选")
-        if use_pages := self._page_bar.isVisible():
-            self._page_prev.setEnabled(self._current_page > 0)
         if self._on_toggle_cb:
             self._on_toggle_cb()
 
     def _on_group_toggle(self, checked: bool):
         for idx in self._file_indices:
             self._data_ref[idx]["selected"] = checked
-        self._render_current_view()
+        self._render_all_rows(self._file_indices)
         sel = len(self._file_indices) if checked else 0
         self._info.setText(f"{len(self._file_indices)} 个文件 · {sel} 已选")
         if self._on_toggle_cb:
             self._on_toggle_cb()
-
-    def _render_current_view(self):
-        if self._page_bar.isVisible():
-            self._render_page()
-        else:
-            self._render_all_rows(self._file_indices)
 
     def _on_cell_hover(self, row: int, col: int):
         if row < 0 or col < 1:
@@ -330,11 +270,15 @@ class _GlassPanel(QFrame):
             return
         item = self._table.item(row, col)
         if item:
-            rect = self._table.visualItemRect(item)
-            pos = self._table.viewport().mapToGlobal(rect.topLeft())
-            pos.setY(pos.y() - _get_tip().height() - 4)
-            _get_tip().show_text(item.text(), None)
-            _get_tip().move(pos)
+            text = item.text()
+            fm = self._table.fontMetrics()
+            col_w = self._table.columnWidth(col)
+            if fm.horizontalAdvance(text) > col_w - 16:
+                rect = self._table.visualItemRect(item)
+                pos = self._table.viewport().mapToGlobal(rect.topLeft())
+                pos.setY(pos.y() - _get_tip().height() - 4)
+                _get_tip().show_text(text, None)
+                _get_tip().move(pos)
 
     def eventFilter(self, obj, event):
         if obj is self._table.viewport():
@@ -379,7 +323,7 @@ class FileListWidget(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(4)
 
         # Top bar
         top = QHBoxLayout()
@@ -387,7 +331,11 @@ class FileListWidget(QWidget):
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("搜索...")
-        self._search.textChanged.connect(self._on_search)
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)
+        self._search_timer.timeout.connect(self._do_search)
+        self._search.textChanged.connect(lambda: self._search_timer.start())
         top.addWidget(self._search)
 
         if grouped:
@@ -412,53 +360,24 @@ class FileListWidget(QWidget):
         top.addWidget(self._count_lbl)
         layout.addLayout(top)
 
-        # Panels
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._container = QWidget()
-        self._container.setStyleSheet("background: transparent;")
-        self._container_lay = QVBoxLayout(self._container)
+        # Panels container (no outer scroll area, panel auto-fits table)
+        self._container_lay = QVBoxLayout()
         self._container_lay.setContentsMargins(0, 0, 0, 0)
         self._container_lay.setSpacing(6)
         self._container_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self._container_lay.addStretch()
-        scroll.setWidget(self._container)
-        layout.addWidget(scroll, stretch=1)
-
-        # Group pagination bar
-        self._group_page_bar = QFrame()
-        self._group_page_bar.setVisible(False)
-        gpl = QHBoxLayout(self._group_page_bar)
-        gpl.setContentsMargins(0, 2, 0, 0)
-        gpl.setSpacing(4)
-        gpl.addStretch()
-        self._gp_prev = QPushButton("<")
-        self._gp_prev.setFixedWidth(28)
-        self._gp_prev.clicked.connect(self._gp_prev_page)
-        gpl.addWidget(self._gp_prev)
-        self._gp_label = QLabel("1/1")
-        self._gp_label.setStyleSheet("font-size: 11px; color: #8e8e93; background: transparent;")
-        gpl.addWidget(self._gp_label)
-        self._gp_next = QPushButton(">")
-        self._gp_next.setFixedWidth(28)
-        self._gp_next.clicked.connect(self._gp_next_page)
-        gpl.addWidget(self._gp_next)
-        gpl.addStretch()
-        layout.addWidget(self._group_page_bar)
-
-        self._group_page = 0
-        self._all_group_names: list[str] = []
+        layout.addLayout(self._container_lay, stretch=1)
 
     @property
     def search_input(self):
         return self._search
 
     def set_data(self, data: list[dict]):
-        self._data = data
+        self.setUpdatesEnabled(False)
+        # Sort by comic name
+        self._data = sorted(data, key=lambda it: self._comic_name(it).lower())
         self._rebuild_groups()
         self._rebuild_panels()
+        self.setUpdatesEnabled(True)
 
     def get_data(self):
         return list(self._data)
@@ -490,62 +409,28 @@ class FileListWidget(QWidget):
         self._panels.clear()
 
         ft = self._search.text().strip().lower()
-
-        # Collect all visible groups
-        all_visible: list[tuple[str, list[int]]] = []
         for comic, indices in self._groups.items():
             visible = [i for i in indices if not ft or
                        ft in comic.lower() or
                        ft in " ".join(str(v) for k, v in self._data[i].items()
                                        if k not in ("selected", "_archive", "_kindle")).lower()]
-            if visible:
-                all_visible.append((comic, visible))
+            if not visible:
+                continue
 
-        self._all_group_names = [c for c, _ in all_visible]
-        total_groups = len(all_visible)
-
-        # Paginate groups if needed
-        use_group_pages = self._grouped and total_groups > _GROUP_PAGE_SIZE
-        self._group_page_bar.setVisible(use_group_pages)
-
-        if use_group_pages:
-            if self._group_page >= max(1, (total_groups + _GROUP_PAGE_SIZE - 1) // _GROUP_PAGE_SIZE):
-                self._group_page = 0
-            start = self._group_page * _GROUP_PAGE_SIZE
-            end = min(start + _GROUP_PAGE_SIZE, total_groups)
-            page_groups = all_visible[start:end]
-            total_pages = max(1, (total_groups + _GROUP_PAGE_SIZE - 1) // _GROUP_PAGE_SIZE)
-            self._gp_label.setText(f"{self._group_page + 1}/{total_pages}")
-            self._gp_prev.setEnabled(self._group_page > 0)
-            self._gp_next.setEnabled(self._group_page < total_pages - 1)
-        else:
-            self._group_page = 0
-            page_groups = all_visible
-
-        for comic, visible in page_groups:
             collapsible = self._grouped and comic != ""
             title = comic if comic else "全部文件"
             panel = _GlassPanel(title, collapsible=collapsible)
             panel.set_files(visible, self._data, self._columns)
             panel.set_toggle_callback(lambda: self.selection_changed.emit())
-            self._container_lay.insertWidget(self._container_lay.count() - 1, panel)
+            self._container_lay.insertWidget(self._container_lay.count(), panel)
             self._panels[comic] = panel
 
         self._update_count()
 
-    def _gp_prev_page(self):
-        if self._group_page > 0:
-            self._group_page -= 1
-            self._rebuild_panels()
-
-    def _gp_next_page(self):
-        total_pages = max(1, (len(self._all_group_names) + _GROUP_PAGE_SIZE - 1) // _GROUP_PAGE_SIZE)
-        if self._group_page < total_pages - 1:
-            self._group_page += 1
-            self._rebuild_panels()
-
-    def _on_search(self):
+    def _do_search(self):
+        self.setUpdatesEnabled(False)
         self._rebuild_panels()
+        self.setUpdatesEnabled(True)
 
     def _expand_all(self):
         for p in self._panels.values():
@@ -556,22 +441,28 @@ class FileListWidget(QWidget):
             if not p._collapsed: p._toggle()
 
     def _select_all(self):
+        self.setUpdatesEnabled(False)
         for it in self._data: it["selected"] = True
         self._rebuild_panels()
+        self.setUpdatesEnabled(True)
         self.selection_changed.emit()
 
     def _deselect_all(self):
+        self.setUpdatesEnabled(False)
         for it in self._data: it["selected"] = False
         self._rebuild_panels()
+        self.setUpdatesEnabled(True)
         self.selection_changed.emit()
 
     def _remove_selected(self):
         to_rm = [it for it in self._data if it.get("selected", True)]
         remaining = [it for it in self._data if not it.get("selected", True)]
         if to_rm:
+            self.setUpdatesEnabled(False)
             self._data = remaining
             self._rebuild_groups()
             self._rebuild_panels()
+            self.setUpdatesEnabled(True)
             self.remove_requested.emit(to_rm)
 
     def _update_count(self):

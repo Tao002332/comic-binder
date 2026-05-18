@@ -113,9 +113,11 @@ class KindleTab(QWidget):
         self._step2 = QWidget()
         s2_layout = QVBoxLayout(self._step2)
         s2_layout.setContentsMargins(0, 0, 0, 0)
+        s2_layout.setSpacing(4)
 
         self._file_list = FileListWidget(
-            columns=["原始ID", "解析标题", "大小", "状态"]
+            columns=["原始ID", "解析标题", "大小", "状态"],
+            grouped=False
         )
         s2_layout.addWidget(self._file_list)
 
@@ -216,21 +218,37 @@ class KindleTab(QWidget):
         if calibre_dir:
             set_calibre_path(calibre_dir)
 
+        # Disable button and show scanning status
+        self._scan_btn.setEnabled(False)
+        self._scan_btn.setText("扫描中...")
+
         ebook_meta_path = get_ebook_meta_path()
-        self._kindle_files = scan_kindle_files(input_dir, ebook_meta_path=ebook_meta_path)
 
-        if not self._kindle_files:
-            QMessageBox.information(
-                self, "未找到文件",
-                "未找到Kindle PDOC文件。\n\n"
-                "期望的目录结构：\n"
-                "  My Kindle Content/\n"
-                "    {ID}_PDOC/\n"
-                "      {ID}_PDOC.azw"
-            )
-            return
+        # Run scan in background thread to avoid UI freeze
+        from PySide6.QtCore import QThread
+        class ScanThread(QThread):
+            def run(self):
+                self._result = scan_kindle_files(input_dir, ebook_meta_path=ebook_meta_path)
 
-        self._show_step2()
+        self._scan_thread = ScanThread()
+        def on_done():
+            self._scan_btn.setEnabled(True)
+            self._scan_btn.setText("扫描Kindle文件")
+            self._kindle_files = self._scan_thread._result
+            if not self._kindle_files:
+                QMessageBox.information(
+                    self, "未找到文件",
+                    "未找到Kindle PDOC文件。\n\n"
+                    "期望的目录结构：\n"
+                    "  My Kindle Content/\n"
+                    "    {ID}_PDOC/\n"
+                    "      {ID}_PDOC.azw"
+                )
+                return
+            self._show_step2()
+
+        self._scan_thread.finished.connect(on_done)
+        self._scan_thread.start()
 
     def _show_step2(self):
         data = []
@@ -404,10 +422,6 @@ class KindleTab(QWidget):
             task.status_text = message
             if not success:
                 task.error_message = message
-                QMessageBox.critical(
-                    self, "转换失败",
-                    f"文件：{task.name}\n位置：{task_id}\n原因：{message}"
-                )
             self._progress_widget.update_task(task)
 
     def _on_all_finished(self):
@@ -420,17 +434,7 @@ class KindleTab(QWidget):
         output_format = getattr(self, "_pending_output_format", "PDF")
         ext = f".{output_format.lower()}"
         if output_dir and os.path.isdir(output_dir):
-            out_files = [f for f in os.listdir(output_dir) if f.lower().endswith(ext)]
-            count = organize_comics_into_folders(output_dir, {ext})
-            if count > 0:
-                QMessageBox.information(self, "归类完成", f"已将 {count} 部漫画归入对应文件夹。\n输出目录：{output_dir}")
-            elif len(out_files) >= 2:
-                QMessageBox.information(self, "转换完成",
-                    f"共 {len(out_files)} 个文件已输出，但未找到可归类的同名漫画。\n"
-                    f"请检查文件名是否包含卷/话编号。\n"
-                    f"输出目录：{output_dir}")
-            else:
-                QMessageBox.information(self, "转换完成", f"所有文件已输出到：{output_dir}")
+            organize_comics_into_folders(output_dir, {ext})
 
     def _cancel(self):
         self._task_manager.cancel_all()

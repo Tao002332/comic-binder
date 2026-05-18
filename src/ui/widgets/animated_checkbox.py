@@ -6,6 +6,8 @@ from PySide6.QtGui import QPainter, QPen, QBrush, QLinearGradient, QColor, QPain
 from PySide6.QtWidgets import QCheckBox, QStyle, QStyleOptionButton
 
 
+_INDICATOR = 16
+
 class AnimatedCheckBox(QCheckBox):
     """Custom checkbox: 135deg gradient fill, glow, bounce pulse, checkmark draw animation."""
 
@@ -14,6 +16,7 @@ class AnimatedCheckBox(QCheckBox):
         self.__pulse = 0.0
         self.__check_draw = 0.0
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumSize(20, 20)
 
         # Pulse animation: scale bounce
         self._pulse_anim = QPropertyAnimation(self, b"pulse")
@@ -51,7 +54,6 @@ class AnimatedCheckBox(QCheckBox):
             self._pulse_anim.stop()
             self._check_anim.stop()
             self._pulse_anim.start()
-            # Delay checkmark draw by 80ms
             from PySide6.QtCore import QTimer
             QTimer.singleShot(80, self._check_anim.start)
 
@@ -79,10 +81,9 @@ class AnimatedCheckBox(QCheckBox):
 
         indicator_rect = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, opt, self)
         r = QRectF(indicator_rect)
-        r.moveTop((self.height() - 22) / 2.0)
-        r.setWidth(22); r.setHeight(22)
+        r.moveTop((self.height() - _INDICATOR) / 2.0)
+        r.setWidth(_INDICATOR); r.setHeight(_INDICATOR)
 
-        # Scale from pulse animation
         pulse = self.__pulse
         if pulse < 0:
             scale = 1.0 + pulse * 0.18
@@ -91,23 +92,23 @@ class AnimatedCheckBox(QCheckBox):
         else:
             scale = 1.0
 
-        # Pressed shrink
         if self._pressed and not self.isChecked():
             scale *= 0.94
 
         cx, cy = r.center().x(), r.center().y()
-        sr = QRectF(cx - 11 * scale, cy - 11 * scale, 22 * scale, 22 * scale)
+        half = _INDICATOR / 2
+        sr = QRectF(cx - half * scale, cy - half * scale, _INDICATOR * scale, _INDICATOR * scale)
 
         if self.isChecked():
             # Glow
             glow1 = QColor(168, 85, 247, 35)
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(glow1)
-            p.drawRoundedRect(sr.adjusted(-3, -3, 3, 3), 9, 9)
+            p.drawRoundedRect(sr.adjusted(-2, -2, 2, 2), 6, 6)
 
             glow2 = QColor(99, 102, 241, 15)
             p.setBrush(glow2)
-            p.drawRoundedRect(sr.adjusted(-6, -6, 6, 6), 12, 12)
+            p.drawRoundedRect(sr.adjusted(-4, -4, 4, 4), 9, 9)
 
             # 135deg gradient
             grad = QLinearGradient(sr.topLeft(), sr.bottomRight())
@@ -116,12 +117,11 @@ class AnimatedCheckBox(QCheckBox):
             grad.setColorAt(1.0, QColor("#ec4899"))
             p.setPen(QPen(QColor(99, 102, 241, 80), 1.5))
             p.setBrush(QBrush(grad))
-            p.drawRoundedRect(sr, 6, 6)
+            p.drawRoundedRect(sr, 5, 5)
 
             # Checkmark with draw animation
             draw_progress = self.__check_draw
             if draw_progress < 1.0:
-                # Clip region to animate checkmark appearance
                 clip_path = QPainterPath()
                 clip_rect = QRectF(sr.left() - 2, sr.top() - 2, sr.width() * draw_progress + 4, sr.height() + 4)
                 clip_path.addRect(clip_rect)
@@ -130,9 +130,9 @@ class AnimatedCheckBox(QCheckBox):
 
             check_alpha = min(1.0, draw_progress * 3.0)
             cm = QPainterPath()
-            cm.moveTo(sr.left() + 5.5, sr.top() + 11.5)
-            cm.lineTo(sr.left() + 9, sr.top() + 15)
-            cm.lineTo(sr.left() + 16.5, sr.top() + 7.5)
+            cm.moveTo(sr.left() + 4, sr.top() + 8.5)
+            cm.lineTo(sr.left() + 6.5, sr.top() + 11)
+            cm.lineTo(sr.left() + 12, sr.top() + 5.5)
             check_color = QColor(255, 255, 255, int(255 * check_alpha))
             p.setPen(QPen(check_color, 2.5, Qt.PenStyle.SolidLine,
                          Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
@@ -142,19 +142,17 @@ class AnimatedCheckBox(QCheckBox):
             if draw_progress < 1.0:
                 p.restore()
         else:
-            # Unchecked
             if self._hovered:
                 border = QColor(168, 85, 247, 102)
-                # Hover glow
                 hover_glow = QColor(168, 85, 247, 8)
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(hover_glow)
-                p.drawRoundedRect(sr.adjusted(-5, -5, 5, 5), 10, 10)
+                p.drawRoundedRect(sr.adjusted(-3, -3, 3, 3), 8, 8)
             else:
                 border = QColor(200, 200, 210, 90)
             p.setPen(QPen(border, 1.5))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(sr, 6, 6)
+            p.drawRoundedRect(sr, 5, 5)
 
         # Draw text if any
         if self.text():
@@ -171,9 +169,8 @@ class AnimatedCheckBox(QCheckBox):
         if self.text():
             fm = self.fontMetrics()
             text_w = fm.horizontalAdvance(self.text())
-            return QSize(22 + 8 + text_w + 4, max(fm.height() + 4, 28))
-        return QSize(26, 28)
+            return QSize(_INDICATOR + 8 + text_w + 4, max(fm.height() + 4, 28))
+        return QSize(20, 24)
 
     def hitButton(self, pos):
-        r = QRectF(0, (self.height() - 22) / 2.0, 22, 22)
-        return r.contains(QPointF(pos))
+        return True
